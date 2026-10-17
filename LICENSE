@@ -30,4 +30,22 @@ against KH Coder's own modules, which are GPL-2.0. The GPL-2.0 text is
 included in plugin/COPYING-GPL-2.0.txt.
 
 KH Coder itself is not included in this distribution. It is licensed
-separately by its author, Koichi Higuchi.
+separately by its author, Koichi Higuchi, under GPL-2.0 or later.
+
+---
+
+THIRD-PARTY NOTICE
+
+KH Coder
+  Copyright (C) 2001- Koichi Higuchi
+  https://khcoder.net
+  GPL-2.0 or later
+  NOT included in this repository, NOT distributed by this project.
+
+  This project is an unofficial third-party tool. It is not affiliated
+  with, endorsed by, or supported by KH Coder's author. Users must
+  obtain KH Coder themselves from the official website.
+
+  The installer in this repository locates a pre-existing KH Coder
+  installation on the user's machine and deploys a driver plugin into
+  it. It does not download, bundle, or redistribute KH Coder.

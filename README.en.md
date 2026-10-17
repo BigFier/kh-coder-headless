@@ -105,10 +105,51 @@ No protocol, no server, no token overhead — the agent just runs commands and r
 
 **Never leave `*.pm.bak` in `plugin_en/`.** KH Coder strips the last 3 characters when scanning plugins, so `khc_cli.pm.bak` loads as `use khc_cli.pm` and raises a plugin-error dialog that blocks forever in an unattended run.
 
+## Disclaimer
+
+### This project does not include KH Coder
+
+**KH Coder itself is not in this repository and is not distributed by this project.**
+
+KH Coder is developed by Koichi Higuchi, who holds its copyright. It is licensed under GPL-2.0 or later. It is an independent, mature project with its own website, documentation, release cadence and support channels:
+
+- Website: https://khcoder.net
+- The author has published books on the methodology; the official README lists them
+
+This repository contains only a **driver plugin that runs inside KH Coder**, plus scripts to install and invoke it. The installer locates *your own* KH Coder installation, drops the plugin in, and generates a launcher. That is all it does.
+
+**You have to download and install KH Coder yourself.** This project does not offer KH Coder downloads or installation support, and takes no responsibility for KH Coder's availability or correctness.
+
+### About this project's status
+
+This is an **unofficial third-party** tool. It has no affiliation with KH Coder's author and no endorsement from them. The `kh-coder` in the name only says what software it serves.
+
+This project comes with **no warranty**. It is provided as-is; the author makes no commitment that it suits any particular purpose and no commitment to maintain it. If you use it for research and publish, verify the methodology yourself — the tests here cover "the command runs", not "the statistics are right".
+
+### Why the plugin is GPL-2.0
+
+`plugin/khc_cli.pm` links KH Coder's modules at runtime. GPL-2.0 requires that it therefore also be GPL-2.0. That is not a choice, it is what the license requires.
+
+The rest — installer, CLI wrapper, docs — is written from scratch here and is MIT.
+
+### If you redistribute
+
+- Redistributing this repository's code: follow MIT (installer etc.) and GPL-2.0 (`plugin/khc_cli.pm`)
+- Redistributing KH Coder itself: check GPL-2.0's obligations yourself — in particular, **you must also make the source available**
+- Bundling both into a single installer: triggers obligations on both sides; ask someone who knows licensing first
+
+### Data handling
+
+All analysis runs **locally on your machine**. The scripts here do not make network calls, do not upload corpora, and collect no usage data. KH Coder itself does not phone home either, unless you explicitly check for updates.
+
+---
+
 ## License
 
-Installer, CLI wrapper and docs: MIT.
+| Part | License |
+|---|---|
+| Installer `lib/`, docs, CLI wrapper | MIT (see `LICENSE`) |
+| Driver plugin `plugin/khc_cli.pm` | **GPL-2.0** (full text in `plugin/COPYING-GPL-2.0.txt`) |
+| KH Coder itself | Not in this repository; licensed separately by its author |
 
-`plugin/khc_cli.pm`: **GPL-2.0**, because it links KH Coder's GPL-2.0 modules at runtime. Full text in `plugin/COPYING-GPL-2.0.txt`.
-
-KH Coder itself is not included and is licensed separately by its author.
+`kh-coder-headless` is a third-party project with no affiliation to KH Coder's author.
