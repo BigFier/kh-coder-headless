@@ -1,7 +1,7 @@
 {
     "name":  "kh-coder-headless",
     "version":  "0.1.0",
-    "description":  "Run KH Coder headless from the command line. 17 analysis commands (word frequency, co-occurrence network, correspondence analysis, KWIC, clustering, topic model, …) with no GUI, no clicking, and no dialog boxes — batch-friendly and scriptable.",
+    "description":  "让 KH Coder 跑在命令行里，可以直接交给 AI agent 操作。17 个分析命令：词频、共现网络、对应分析、KWIC、聚类、topic model，无界面、可批量、可脚本化。",
     "type":  "module",
     "engines":  {
                     "node":  "\u003e=18"
