@@ -1,0 +1,51 @@
+{
+    "name":  "kh-coder-headless",
+    "version":  "0.1.0",
+    "description":  "Run KH Coder headless from the command line. 17 analysis commands (word frequency, co-occurrence network, correspondence analysis, KWIC, clustering, topic model, …) with no GUI, no clicking, and no dialog boxes — batch-friendly and scriptable.",
+    "type":  "module",
+    "engines":  {
+                    "node":  "\u003e=18"
+                },
+    "bin":  {
+                "khc":  "lib/cli.mjs",
+                "khc-detect":  "lib/detect.mjs",
+                "khc-setup":  "lib/install.mjs"
+            },
+    "files":  [
+                  "lib",
+                  "plugin",
+                  "docs",
+                  "README.md",
+                  "README.zh-CN.md",
+                  "LICENSE",
+                  "CHANGELOG.md"
+              ],
+    "scripts":  {
+                    "doctor":  "node lib/cli.mjs doctor",
+                    "setup":  "node lib/cli.mjs setup",
+                    "test":  "node scripts/selftest.mjs"
+                },
+    "keywords":  [
+                     "khcoder",
+                     "kh-coder",
+                     "text-mining",
+                     "corpus",
+                     "corpus-linguistics",
+                     "co-occurrence",
+                     "kwic",
+                     "concordance",
+                     "japanese",
+                     "nlp",
+                     "headless",
+                     "cli"
+                 ],
+    "license":  "MIT",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/BigFier/kh-coder-headless.git"
+                   },
+    "bugs":  {
+                 "url":  "https://github.com/BigFier/kh-coder-headless/issues"
+             },
+    "homepage":  "https://github.com/BigFier/kh-coder-headless#readme"
+}
