@@ -155,7 +155,7 @@ node lib/install.mjs
 | 命令 | 干什么 | 出来什么 |
 |---|---|---|
 | `words` | 看不同阈值下有多少词 | 终端输出 |
-| `freq` | 词频表 | CSV |
+| `freq` | 词频表 | CSV（UTF-8） |
 | `netgraph` | 共现网络图 | PNG |
 | `conc` | 检索词的上下文 | CSV |
 | `corresp` | 对应分析，看哪些词区分组别 | PNG + 坐标 CSV |
@@ -171,6 +171,20 @@ node lib/install.mjs
 | `dbtables` | 看语料结构 | 终端输出 |
 | `db` | 列出已有工程 | 终端输出 |
 | `probe` | 打印运行环境 | 终端输出 |
+
+## 想直接跑一遍
+
+`examples/quickstart/` 里有一份 50 段的虚构访谈（员工为什么离职），约 3,900 字。不用准备语料，跑这几条就能看到东西：
+
+```
+cd dsh-kh-coder/examples/quickstart
+khc words   corpus.txt --at 3,4,5,8
+khc netgraph corpus.txt out/network.png --lang cn --min 4 --hinshi Noun,Verb
+khc freq    corpus.txt out/freq.csv --lang cn
+khc conc    corpus.txt 加班 out/kwic.csv --lang cn
+```
+
+`out/` 里已经放了跑出来的三个文件，可以对着看。具体每一步在看什么，见 [examples/quickstart/README.md](examples/quickstart/README.md)。
 
 ## 几个例子
 
@@ -224,7 +238,12 @@ khc conc corpus.txt 领导 out/kwic.csv
 --csv FILE   导出图形坐标
 --tani UNIT  计数单位：bun 文、dan 段、h1-h5 标题层级
 --topics N   topic model 主题数
+--hinshi X   只统计某些词性，如 --hinshi Noun,Verb
 ```
+
+`--hinshi` 对中文语料基本是必须的。不写的话，图上的「不、就、也、都、很、但」会把真正的词挤到边上——这些字在中文里出现得太密，但它们不携带内容。写 `--hinshi Noun,Verb` 一般就够。
+
+可用的类名看你语料的分词器：中文走 Stanford，用 `Noun`、`Verb`、`Adj`、`Adv`、`ProperNoun` 这些；日文走 MeCab，用 `名詞`、`動詞` 这些。类名具体有哪些，跑一次 `khc freq` 看 CSV 的列头就知道。
 
 ## 踩过的坑
 
@@ -232,7 +251,11 @@ khc conc corpus.txt 领导 out/kwic.csv
 
 **词频要归一化。** KH Coder 数的是原始次数。一份每年都在变厚的报告，所有词都会显示涨。跨年比较前先除以总词数。
 
-**`freq` 出来的是 Shift_JIS，不是 UTF-8。** Excel 打开正常，程序读要按 CP932 解码。
+**路径里带中文会踩一串坑。** KH Coder 内部的 `open`、`File::Copy` 走的是 Windows ANSI 代码页，Perl 的字符串是 Unicode 的，中间差一次转换。纯 ASCII 路径下看不出问题，一旦目录名里有中文，就会报「要分析的文件不存在」——文件其实好好在那儿。这个项目里凡是碰文件的地方都做了转换，但你要是自己改插件，记住这个坑。
+
+**`freq` 的原始输出是 CP932，装不下简体中文。** KH Coder 自己写的 CSV 用日文 Shift_JIS 编码，简体里大量汉字它没法表示，会被转义成 `\x{8BF4}` 这种字面文本。这个项目解码后把转义还原、再写成带 BOM 的 UTF-8，所以 Excel 直接打开就是对的。你要是绕过这个项目自己调 `mysql_words->csv_list`，会拿到转义版。
+
+**`conc` 的结果里，跨段的两截会被一个怪字符连起来。** 表现为 `鈴?`，其中 `?` 是 KH Coder 替换非法字节留下的。这个项目把它换成了空格。
 
 **`cls` 在大语料上会崩。** 5 万多段的日语语料上，63 个词能跑完，170 个词时直接崩，退出码 `0xC000013A`，日志里连 Perl 报错都没有。词数控制在 100 以内，或者按年切开。
 

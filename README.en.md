@@ -110,7 +110,26 @@ Common options:
 --csv FILE     export figure coordinates
 --tani UNIT    counting unit: bun / dan / h1..h5
 --topics N     number of topics
+--hinshi X     restrict to word classes, e.g. --hinshi Noun,Verb
 ```
+
+`--hinshi` is close to mandatory for Chinese corpora. Without it the figure fills with 不/就/也/都/很/但 — extremely frequent characters that carry no content. `--hinshi Noun,Verb` is usually enough.
+
+Class names depend on the segmenter: Chinese goes through Stanford and uses `Noun`, `Verb`, `Adj`, `Adv`, `ProperNoun`; Japanese goes through MeCab and uses its own POS names. Run `khc freq` once and look at the CSV header to see what your corpus produced.
+
+## Try it without your own corpus
+
+`examples/quickstart/` ships a 50-record fictional interview corpus (why people quit their jobs), about 3,900 Chinese characters:
+
+```bash
+cd dsh-kh-coder/examples/quickstart
+khc words   corpus.txt --at 3,4,5,8
+khc netgraph corpus.txt out/network.png --lang cn --min 4 --hinshi Noun,Verb
+khc freq    corpus.txt out/freq.csv --lang cn
+khc conc    corpus.txt 加班 out/kwic.csv --lang cn
+```
+
+`out/` already contains the three results, so you can compare. Step-by-step commentary is in [examples/quickstart/README.md](examples/quickstart/README.md) (Chinese).
 
 ## Handing it to an agent
 
@@ -133,7 +152,11 @@ No protocol, no server, no token overhead — the agent just runs commands and r
 
 **Normalize your counts.** KH Coder counts raw occurrences. A report that grows 80% each year will make every term look like it is rising. Divide by total tokens before comparing across documents.
 
-**`freq` output is Shift_JIS, not UTF-8.** Excel opens it fine; decode as CP932 if you read it programmatically.
+**Non-ASCII paths break a lot of things.** KH Coder's internal `open` and `File::Copy` go through the Windows ANSI code page while Perl strings are Unicode. With ASCII paths the two coincide and nothing shows; put the corpus under a directory with Chinese characters and you get "the file to analyse does not exist" — for a file that plainly exists. Every filesystem touch in this project converts, but keep it in mind if you edit the plugin.
+
+**`freq`'s raw output is CP932 and cannot represent simplified Chinese.** KH Coder writes Japanese Shift_JIS; characters it cannot encode come out as literal `\x{8BF4}` text. This project decodes, restores the escapes, and writes UTF-8 with a BOM, so Excel opens it correctly. Call `mysql_words->csv_list` yourself and you get the escaped form.
+
+**`conc` glues cross-paragraph context with an odd marker.** It shows up as `鈴?`, where `?` is KH Coder substituting an undecodable byte. This project replaces it with spaces.
 
 **`cls` crashes on large corpora.** On a 54,526-paragraph Japanese corpus, 63 terms completed; ~170 terms crashed natively (exit `0xC000013A`, no Perl exception logged). Keep the term count under ~100 or split by year.
 

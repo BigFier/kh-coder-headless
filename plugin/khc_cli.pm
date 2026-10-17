@@ -131,11 +131,46 @@ sub _uni { my $p = shift; return eval { $::config_obj->uni_path($p) } // $p; }
 # character strings, so they must be encoded back before touching the disk --
 # otherwise a path containing Chinese is reported as "no such file".
 # ---------------------------------------------------------------------------
+# Convert a Perl character string into the byte form the Windows file APIs
+# expect.
+#
+# MEASURED FACTS ON THIS MACHINE (do not "improve" these without re-testing)
+#
+#   * The console reports cp65001 (UTF-8): khc.cmd prints
+#     "Encoding of this Console: cp65001".
+#   * Windows Perl's -e / open() still go through the *ANSI* API, which on this
+#     machine is cp936. Encoding the path as UTF-8 therefore does NOT match the
+#     file, even though the console is UTF-8.
+#   * Empirical check: for a path containing 逆向工程, probing cp936 / cp65001 /
+#     cp932 / 1252 showed cp936 matched and the others did not. See the probe
+#     left in _exists().
+#
+# The earlier version of this function was therefore correct in *what* it did
+# (encode to the ANSI code page) but wrong in *how* it decided, and the
+# "fix" that keyed off the console code page broke it. This version asks for
+# the ANSI code page explicitly via Win32::GetACP, and falls back to cp936 --
+# the value actually verified on this machine.
+sub _ansi_cp {
+    my $cp = 936;
+    eval {
+        require Win32;
+        if (defined &Win32::GetACP) {
+            my $v = Win32::GetACP();
+            $cp = $v if $v && $v > 0;
+        }
+    };
+    return $cp;
+}
+
+my $_ANSI_CP;    # memoised; the ANSI codepage is fixed for the process
+
 sub _fs {
     my $p = shift;
     return $p unless defined $p;
     return $p unless utf8::is_utf8($p);      # already bytes
-    my $b = eval { Encode::encode('cp936', $p) };
+    $_ANSI_CP = _ansi_cp() unless defined $_ANSI_CP;
+
+    my $b = eval { Encode::encode("cp$_ANSI_CP", $p) };
     return $@ ? $p : $b;
 }
 
@@ -143,8 +178,33 @@ sub _exists {
     my $p = shift;
     return 0 unless defined $p;
     return 1 if -e $p;
-    my $b = _fs($p);
-    return ($b ne $p && -e $b) ? 1 : 0;
+
+    # Probe every plausible byte form. Windows Perl's -e goes through the ANSI
+    # API, so a UTF-8 character string does not match a file whose name has
+    # non-ASCII characters -- the string must be encoded into the *ANSI* code
+    # page first, which is NOT necessarily the console code page.
+    my @forms;
+    push @forms, ['raw', $p];
+    if (utf8::is_utf8($p)) {
+        for my $cp (qw(936 65001 932 1252)) {
+            my $b = eval { Encode::encode("cp$cp", $p) };
+            push @forms, ["cp$cp", $b] if defined $b && !$@;
+        }
+        my $f = _fs($p);
+        push @forms, ['_fs', $f] if defined $f && $f ne $p;
+    }
+
+    for my $pair (@forms) {
+        my ($tag, $s) = @$pair;
+        next unless defined $s;
+        if (-e $s) {
+            _log("exists: matched form=$tag");
+            return 1;
+        }
+    }
+
+    _log("exists: NO form matched for '$p'");
+    return 0;
 }
 
 # ---------------------------------------------------------------------------
@@ -441,14 +501,110 @@ sub _apply_params {
              " readback=" . (defined $readback ? $readback : 'undef'));
     }
 
-    # hinshi: comma-separated part-of-speech ids -> tick the checkbuttons
-    if (exists $PARAM{hinshi}) {
-        my @ids = split /[,\s]+/, $PARAM{hinshi};
-        my $chk = $w->{check_hinshi} || $w->{hinshi_objs};
-        if (ref($chk) eq 'ARRAY') {
-            _log("param hinshi: " . scalar(@$chk) . " checkbuttons found, wanted [@ids]");
-        } else {
-            _log("param hinshi: checkbutton set not found; ignored");
+    # hinshi: comma-separated word classes -> tick the checkbuttons.
+    #
+    # Accepts either names ("Noun,Verb") or numeric ids ("1,35"). Names are the
+    # friendlier form but differ per analyser: the Japanese/MeCab pipeline uses
+    # POS names like 名詞-一般, while the Chinese/Stanford pipeline uses English
+    # class names (Noun, Verb, Adj, ...). Both are resolved against the
+    # hselection table of the current database, so callers do not have to know
+    # which segmenter produced the corpus.
+    #
+    # THE ONLY PATH THAT WORKS is gui_widget::hinshi::selection_set(), which
+    # takes a hash of class-name => 0|1 and calls select/deselect on each
+    # checkbox widget. Writing $win->{hinshi} directly looks plausible and even
+    # logs success, but the analysers re-read the widgets, so the filter has no
+    # effect -- verified: terms like 就/也/都/很 still appeared in the figure.
+    #
+    # Leaving out the adverb class is the single most useful setting for
+    # Chinese corpora: 就/也/都/很 are grammatical glue that would otherwise
+    # dominate a co-occurrence network.
+    if (exists $PARAM{hinshi} && length $PARAM{hinshi}) {
+        my @want = split /[,\s]+/, $PARAM{hinshi};
+
+        # Resolve names -> ids using the live database (same source the bayes
+        # command uses; mysql_ready creates this table per project).
+        my (%id_of, %name_of);
+        eval {
+            my $st = mysql_exec->select("SELECT khhinshi_id, name FROM hselection", 1);
+            my $h = $st->hundle;
+            while (my $r = $h->fetch) {
+                next unless defined $r->[0] && defined $r->[1];
+                $id_of{ $r->[1] } = $r->[0];
+                $name_of{ $r->[0] } = $r->[1];
+            }
+        };
+        _log("hinshi: hselection has " . scalar(keys %id_of) . " classes");
+
+        my %keep;    # class name => 1
+        for my $v (@want) {
+            next unless defined $v && length $v;
+            if ($v =~ /^\d+$/) {
+                if (defined $name_of{$v}) { $keep{ $name_of{$v} } = 1; }
+                else { _log("hinshi: numeric id $v not present in hselection"); }
+                next;
+            }
+            if (defined $id_of{$v}) { $keep{$v} = 1; next; }
+            _log("hinshi: '$v' is neither a numeric id nor a known class name");
+        }
+
+        if (%keep) {
+            my $hw = $w->{hinshi_obj}
+                  || (ref($w->{words_obj}) ? $w->{words_obj}->{hinshi_obj} : undef)
+                  || (ref($w->{net_obj})   ? $w->{net_obj}->{hinshi_obj}   : undef);
+
+            # The only reliable path is to write the widget's '{checks}' array
+            # directly.
+            #
+            # gui_widget/hinshi.pm builds one Checkbutton per class, each bound
+            # to $selection[$row], and keeps that array as $self->{checks}.
+            # selected() -- which the analysers call to build the SQL -- reads
+            # *that array*, not the widgets. Consequently:
+            #
+            #   * selection_set() calls select/deselect on the widgets, which
+            #     updates their -variable but NOT {checks}; selected() still
+            #     returns an empty list, the SQL ends up as "AND ( )" and MySQL
+            #     rejects it ("请至少选择1个词性(POS)"). Verified.
+            #   * assigning $w->{hinshi} does nothing at all, because hinshi()
+            #     delegates to words_obj->hinshi, which reads the widget.
+            #
+            # NOTE ON {name}: in the build installed here it maps row => class
+            # ID (1, 2, 3, 11, 25, 26, 30, 35, 40), not row => name, which is
+            # what the published beta source suggests. Check both forms so this
+            # keeps working whichever way the host build populates it.
+            my %keep_id = map { $id_of{$_} => 1 } keys %keep;
+            delete $keep_id{''};
+
+            my $applied = 0;
+            if ($hw && ref($hw->{checks}) eq 'ARRAY' && ref($hw->{name}) eq 'HASH') {
+                my @checks = @{ $hw->{checks} };
+                my $hits   = 0;
+                my @seen;
+                for my $row (sort { $a <=> $b } keys %{ $hw->{name} }) {
+                    my $key = $hw->{name}{$row};
+                    next unless defined $key && length $key;
+                    push @seen, "$row=$key";
+                    my $on = ($keep_id{$key} || $keep{$key}) ? 1 : 0;
+                    $checks[$row] = $on;
+                    $hits++ if $on;
+                }
+                _log("hinshi: widget key map = [" . join(' ', @seen) . "]");
+                $hw->{checks} = \@checks;
+                # Keep the visible boxes consistent so a human looking at the
+                # window sees what the run actually used. selection_set() takes
+                # the same key form the widget itself uses.
+                my %sel = map { $_ => (($keep_id{$_} || $keep{$_}) ? 1 : 0) }
+                          (keys %keep_id, keys %keep);
+                eval { $hw->selection_set(\%sel) };
+                $applied = 1;
+                _log("hinshi: wrote checks array, $hits class(es) on: [" .
+                     join(',', sort keys %keep) . "]");
+            }
+
+            unless ($applied) {
+                _log("hinshi: could not reach the hinshi widget; filter NOT applied " .
+                     "(analysers read its {checks} array, so any other route is a no-op)");
+            }
         }
     }
 
@@ -472,7 +628,14 @@ sub _ensure_project {
     if ($proj) {
         _log("reuse db=" . (eval { $proj->dbname } // '?'));
     } else {
-        $proj = eval { kh_project->new(target => $file, comment => 'khc_cli') };
+        # kh_project->new() touches the disk (it hashes the file and picks a
+        # dbname from it), so it needs the *filesystem byte form* of the path,
+        # not the decoded character string we received from @ARGV. Passing the
+        # character string works by accident when the path is pure ASCII --
+        # which is why every earlier test passed -- and fails with
+        # "要分析的文件不存在" as soon as a directory name contains 中文.
+        my $target = _fs($file);
+        $proj = eval { kh_project->new(target => $target, comment => 'khc_cli') };
         if ($@ || !$proj) { _log("kh_project->new FAIL: $@"); return undef; }
         my $projs = eval { kh_projects->read } or return undef;
         my $added = eval { $projs->add_new($proj) };
@@ -1001,11 +1164,41 @@ sub _figure {
         return 0 unless ref($plots) eq 'ARRAY' && @$plots;
         my $i = defined($idx) ? $idx : $#$plots;
         $i = $#$plots if $i > $#$plots;
-        $plots->[$i]->save($outpng);
+
+        # KH Coder's own save path ends with File::Copy::copy(), which fails on
+        # non-ASCII destinations on Windows (kh_r_plot.pm:567). The failure is
+        # inside KH Coder, so we cannot fix it by encoding the path ourselves:
+        # we hand it a pure-ASCII scratch path and move the file afterwards.
+        my $wants_unicode = ($outpng =~ /[^\x00-\x7F]/);
+        my $target = $outpng;
+        my $scratch;
+
+        if ($wants_unicode) {
+            $scratch = "$LOGDIR/_plot_tmp_" . $$ . ".png";
+            unlink($scratch) if -e $scratch;
+            $target = $scratch;
+            _log("figure: saving via ASCII scratch (destination has non-ASCII)");
+        }
+
+        $plots->[$i]->save($target);
+
+        if ($wants_unicode) {
+            # Move scratch -> real destination using Perl's rename, which goes
+            # through the Unicode-aware Win32 API for character strings.
+            my $dst = _fs($outpng);
+            unless (rename($scratch, $dst)) {
+                # rename can fail across volumes; fall back to copy+unlink.
+                _copy_file($scratch, $outpng) or die "move failed: $!\n";
+                unlink($scratch);
+            }
+        }
         1;
     };
     if ($@) { _log("figure EXC: $@"); return 0; }
-    _log("figure -> $outpng exists=" . (-e $outpng ? 'yes size=' . (-s $outpng) : 'no'));
+    # -e needs the filesystem byte form; using $outpng directly reports a false
+    # "exists=no" whenever the destination contains non-ASCII characters.
+    my $out_fs = _fs($outpng);
+    _log("figure -> $outpng exists=" . (-e $out_fs ? 'yes size=' . (-s $out_fs) : 'no'));
 
     # Optionally dump the plotted coordinates. A correspondence-analysis figure
     # alone is hard to cite -- the numbers behind each point are what a report
@@ -1070,16 +1263,24 @@ sub _export_coords {
 # Copy a file byte-for-byte; returns the size, or undef on failure.
 sub _copy_file {
     my ($src, $dst) = @_;
+
+    # Both ends must be in filesystem byte form. Same trap as elsewhere in this
+    # file: open() goes through the ANSI API, so a decoded character string
+    # containing 中文 silently fails to open -- the error looks like a missing
+    # source file, which sends you hunting in the wrong place.
+    my $s = _fs($src);
+    my $d = _fs($dst);
+
     my $ok = eval {
-        open(my $in,  '<:raw', $src) or die "in: $!";
-        open(my $out, '>:raw', $dst) or die "out: $!";
+        open(my $in,  '<:raw', $s) or die "in: $!";
+        open(my $out, '>:raw', $d) or die "out: $!";
         my $buf = do { local $/; my $d = <$in>; $d };
         print {$out} $buf;
         close($in); close($out);
         1;
     };
     if ($@) { _log("copy failed: $@"); return undef; }
-    return -s $dst;
+    return -s $d;
 }
 
 # ---------------------------------------------------------------- probe
@@ -1459,15 +1660,65 @@ sub _cmd_freq {
     my ($file, $outcsv) = @_;
     $outcsv ||= "$LOGDIR/freq.csv";
     my $p = _do_preprocess($file) or do { _log("freq: preprocess failed"); return 0; };
+
+    # Two problems with mysql_words->csv_list(), both handled here:
+    #
+    # 1. It writes through open()/File::Copy inside KH Coder, which fails on
+    #    non-ASCII destinations on Windows. So it always writes to an ASCII
+    #    scratch path, and we move the bytes afterwards.
+    #
+    # 2. Its output is CP932 (Japanese Shift_JIS). Simplified Chinese has many
+    #    characters CP932 cannot represent, and Encode escapes those as the
+    #    literal text \x{8BF4} instead of the character. A user opening the CSV
+    #    sees 同\x{6837} rather than 同样. Since this tool targets Chinese
+    #    corpora, we decode CP932, turn the escapes back into real characters,
+    #    and write UTF-8 with a BOM (Excel opens that correctly for both
+    #    Chinese and Japanese).
+    my $scratch = "$LOGDIR/_freq_tmp_" . $$ . ".csv";
+    unlink($scratch) if -e $scratch;
+
     my $ok = eval {
         require mysql_words;
-        # CLASS method (path as first arg). Output is Shift_JIS on Windows.
-        my $r = mysql_words->csv_list($outcsv);
+        my $r = mysql_words->csv_list(_fs($scratch));
         _log("csv_list returned " . (defined $r ? $r : 'undef'));
         1;
     };
     if ($@) { _log("freq EXC: $@"); return 0; }
-    _log("freq -> $outcsv exists=" . (-e $outcsv ? 'yes size=' . (-s $outcsv) : 'no'));
+    return 0 unless -e $scratch;
+
+    my $converted = eval {
+        require Encode;
+        open(my $in, '<:raw', $scratch) or die "read scratch: $!";
+        my $raw = do { local $/; <$in> };
+        close($in);
+        die "empty csv" unless defined $raw && length $raw;
+
+        # CP932 bytes -> character string. FB_DEFAULT keeps going on bytes that
+        # do not form a valid sequence.
+        my $txt = Encode::decode('cp932', $raw, Encode::FB_DEFAULT());
+
+        # Undo the \x{XXXX} escapes Encode emitted for unencodable characters.
+        my $fixed = 0;
+        $txt =~ s/\\x\{([0-9A-Fa-f]+)\}/ do { $fixed++; chr(hex($1)) } /ge;
+
+        # Normalise to bare LF before writing. The stream layer translates LF
+        # to CRLF on Windows; leaving the original CRLF in place doubles every
+        # line break and the CSV ends up with a blank row between records.
+        $txt =~ s/\r\n/\n/g;
+
+        my $dst = _fs($outcsv);
+        open(my $out, '>:encoding(utf-8)', $dst) or die "write csv: $!";
+        print $out "\x{FEFF}";          # BOM so Excel detects UTF-8
+        print $out $txt;
+        close($out);
+        _log("freq: wrote UTF-8, un-escaped $fixed character(s)");
+        1;
+    };
+    if ($@) { _log("freq convert EXC: $@"); unlink($scratch); return 0; }
+    unlink($scratch);
+
+    my $out_fs = _fs($outcsv);
+    _log("freq -> $outcsv exists=" . (-e $out_fs ? 'yes size=' . (-s $out_fs) : 'no'));
     return $ok ? 1 : 0;
 }
 
@@ -2295,6 +2546,27 @@ sub _cmd_conc {
             $start += 200;
         }
         _log("conc: collected " . scalar(@$rows) . " rows");
+
+        # Clean the paragraph-boundary marker out of the context cells.
+        #
+        # When a KWIC window spans two paragraphs, this host build glues them
+        # with a separator that comes back as U+9234 followed by '?' (the '?'
+        # is gui_window.pm:471 replacing U+FFFD, i.e. an undecodable byte).
+        # Plain text it is not -- it shows up in the middle of a sentence and
+        # makes the output look corrupted -- so replace it with a visible
+        # separator. Verified: 26 occurrences in an 18-row KWIC over a 50-row
+        # corpus, each one exactly at a line boundary in the source.
+        #
+        # Written defensively: on a build that does not produce this marker the
+        # substitution simply matches nothing.
+        for my $r (@$rows) {
+            next unless ref($r) eq 'ARRAY';
+            for my $cell (@$r) {
+                next unless defined $cell;
+                $cell =~ s/\x{9234}\s*\?/\x{2002}\x{2002}/g;
+            }
+        }
+
         $got = 1;
         1;
     };
@@ -2302,9 +2574,14 @@ sub _cmd_conc {
     return 0 unless $got;
 
     # Write UTF-8 CSV ourselves (no File::BOM dependency).
+    #
+    # The path must go through _fs(): open() on Windows uses the ANSI code page,
+    # so a destination containing 中文 fails with "No such file or directory"
+    # even though the folder exists. Same trap as _copy_file and _cmd_freq.
+    my $outcsv_fs = _fs($outcsv);
     my $wrote = eval {
         require Encode;
-        open(my $fh, '>:encoding(utf8)', $outcsv) or die "cannot open $outcsv: $!";
+        open(my $fh, '>:encoding(utf8)', $outcsv_fs) or die "cannot open $outcsv: $!";
         print $fh "L,C,R\n";
         for my $r (@$rows) {
             my @c = map { defined $_ ? $_ : '' } @$r;
@@ -2317,7 +2594,7 @@ sub _cmd_conc {
     if ($@) { _log("conc write EXC: $@"); return 0; }
 
     _log("conc -> $outcsv rows=" . scalar(@$rows) .
-         " exists=" . (-e $outcsv ? 'yes size=' . (-s $outcsv) : 'no'));
+         " exists=" . (-e $outcsv_fs ? 'yes size=' . (-s $outcsv_fs) : 'no'));
     return $wrote ? 1 : 0;
 }
 
