@@ -40,8 +40,8 @@ check("package.json 可解析且字段完整", () => {
   if (!pkg.bin.khc) throw new Error("bin 里没有 khc 入口");
 });
 
-check("README 中英双版存在", () => {
-  for (const f of ["README.md", "README.zh-CN.md"]) {
+check("README 中英双版存在（中文为默认）", () => {
+  for (const f of ["README.md", "README.en.md"]) {
     if (!fs.existsSync(path.join(ROOT, f))) throw new Error(`缺少 ${f}`);
   }
 });

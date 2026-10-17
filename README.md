@@ -1,114 +1,231 @@
 # kh-coder-headless
 
-**Run KH Coder from the command line — or hand it to an AI agent.**
+**让 KH Coder 跑在命令行里，可以直接交给 AI agent 操作。**
 
-[中文说明](README.zh-CN.md) · 中文用户建议直接看中文版，那份更详细。
+KH Coder 是语料库研究里最好用的工具之一，但它只有图形界面。这带来三个麻烦：
+
+- **不会用。** 十七个分析功能，界面上几十个按钮，不知道该点哪个、参数填多少。跟着教程走一遍还行，换一份语料又懵了。
+- **太累。** 做一次分析要点十几下，改个参数重跑一遍又是十几下。想试试 `--min` 设 100 还是 150，得点两次、等两次、看图对比。
+- **批量做不了。** 手上有二十份文档要分别跑，或者想逐年跑一遍看变化，只能一份一份点。点到第十份就烦了。
+
+这个项目把 17 个分析功能变成了命令行。装好之后，你可以：
+
+- 用一行命令跑完一次分析
+- 把整批任务写进脚本
+- **或者直接把活儿交给 AI agent——它自己会敲命令、看图、告诉你结论**
+
+后面这条是最省事的。你不用学 KH Coder，只要把语料和问题交给 agent，它会先探阈值、再选方法、跑完读图，最后用中文跟你解释。
+
+[English](README.en.md)
 
 ---
 
-KH Coder is one of the best tools for corpus research, but it only has a GUI. Three things get in the way:
+## AI 能帮你做到什么
 
-- **You don't know which button to press.** Seventeen analysis functions, dozens of controls. Following a tutorial works once; the next corpus leaves you lost again.
-- **It's tedious.** One analysis is a dozen clicks. Change a parameter and it's a dozen more.
-- **It doesn't batch.** Twenty documents, or ten years of one document, means twenty or ten manual runs.
+### 场景一：不知道用什么方法
 
-This package turns all 17 functions into commands. Then you can script them — or **let an AI agent drive them**. The agent picks the parameters, reads the output, and explains the result.
+> **你：** 我这里有一份知乎上关于「考公」的回答合集，大概 40 万字，我想看看大家在聊什么。该用什么方法？
+
+agent 会先跑 `words` 看词频分布，然后判断：
+
+- 想找「主要话题」→ 共现网络，看哪些词抱团
+- 想找「不同人群的用词差异」→ 如果语料里能分出组（比如应届生 vs 工作三年以上），用对应分析
+- 想看「态度怎么变化」→ 按时间分组，看各年词频
+
+它不会一上来就套模板，而是先看你的语料长什么样。
+
+### 场景二：参数调不对
+
+> **你：** 共现网络画出来一团糊，字全叠在一起。
+
+这是 `--min` 设太低，上图的词太多。agent 会跑：
 
 ```
-khc words   corpus.txt --at 20,50,100
-khc netgraph corpus.txt out/net.png --min 150
-khc conc     corpus.txt 领导 out/kwic.csv
+khc words corpus.txt --at 5,20,50,100
 ```
 
-## How it works
+看到 `freq >= 5 -> 3778 terms`，就知道 5 太低了。改到 150 左右的阈值重画，图就清爽了。
 
-A driver plugin runs *inside* `kh_coder.exe` and calls KH Coder's own analysis functions — same MeCab parsing, same MySQL, same R plotting. Output is byte-for-byte what you would get clicking through the interface.
+这种「看结果反推参数」的活儿人做起来要来回试好几次，agent 一次就能收敛。
 
-## Requirements
+### 场景三：批量跑，跑完还要对比
 
-- Windows (KH Coder's bundled MySQL and R are Windows-only)
-- Node.js ≥ 18 (installer and CLI wrapper only)
-- KH Coder 3.x installed — [download](https://khcoder.net/dl3.html)
+> **你：** 我有 2015 到 2024 年十份年报，想看用词十年里有什么变化。
 
-## Install
+人的做法：手动跑十次，把十张图摊开对比，眼睛找不同。
 
-```bash
+agent 的做法：
+
+```
+for y in 2015..2024:  khc freq year_$y.txt out/freq_$y.csv
+```
+
+十份跑完，算出每年的词频向量，比较相邻年的差异，找出变化最大的那些词，最后告诉你：
+
+> 「2019 年之后『转型』出现频率涨了 4 倍，同时『稳增长』掉了一半。这两件事是同一年发生的。」
+
+手工做这个要一两小时，agent 十几分钟。
+
+### 场景四：跑完了但看不懂图
+
+> **你：** 这张共现网络图，我该说什么？
+
+agent 读图（它可以直接看 PNG），告诉你：
+
+> 「图上分成三块：左上角是人事相关的（招聘、面试、简历），右上是工作内容（项目、加班、汇报），下方单独一簇是离职（辞职、跳槽、仲裁）。中间『领导』这个词连接了第二和第三簇，说明它是加班和离职之间的桥梁。」
+
+这就是常说的「读图」，人也能做，但需要经验。agent 24 小时在线，而且不会因为看了两百张图而疲劳。
+
+## 它是怎么工作的
+
+在 `kh_coder.exe` 进程里塞了个插件，直接调它自己的分析函数。
+
+所以跑出来的结果和手点界面**完全一样**——同一个 MeCab 分词、同一个 MySQL、同一个 R 绘图。不是另写一套近似的东西。
+
+```
+你的命令  →  khc.cmd  →  kh_coder.exe（加载插件）→  KH Coder 原生分析  →  结果
+```
+
+## 安装
+
+需要 Windows、Node.js 18 以上，以及已经装好的 KH Coder 3.x。
+
+KH Coder 本体不在这个包里（装完 7.7 GB，GPL-2.0，不方便再分发），先去 [官网](https://khcoder.net/dl3.html) 装 Windows 版。
+
+```
 git clone https://github.com/BigFier/kh-coder-headless.git
 cd kh-coder-headless
 node lib/install.mjs
 ```
 
-KH Coder itself is not bundled: it is ~7.7 GB and GPL-2.0. The installer finds your existing installation (environment variable → common paths → registry → `PATH`), deploys the driver into `plugin_en/`, generates a launcher, and verifies with `probe`.
+安装器自动完成：
 
-If detection fails:
+1. 找 KH Coder 装在哪（环境变量 → 常见目录 → 注册表 → PATH）
+2. 复制 `khc_cli.pm` 到 `<KH Coder>/plugin_en/`
+3. 生成 `<KH Coder>/khc.cmd`，把路径写进去
+4. 跑 `probe` 确认能用
 
-```bash
-node lib/install.mjs --khc-home "D:\khcoder3"
+找不到就手动指定：`node lib/install.mjs --khc-home "D:\khcoder3"`
+
+## 17 个命令
+
+| 命令 | 干什么 | 出来什么 |
+|---|---|---|
+| `words` | 看不同阈值下有多少词 | 终端输出 |
+| `freq` | 词频表 | CSV |
+| `netgraph` | 共现网络图 | PNG |
+| `conc` | 检索词的上下文 | CSV |
+| `corresp` | 对应分析，看哪些词区分组别 | PNG + 坐标 CSV |
+| `cls` | 层次聚类树状图 | PNG |
+| `mds` | 多维尺度分析 | PNG |
+| `som` | 自组织映射 | PNG |
+| `topic` | topic model | 3 个 CSV |
+| `morpho` | 分词预处理 | 内部 |
+| `mkoutvar` | 从标题建分组变量 | 内部 |
+| `crosstab` | 交叉表加卡方 | CSV |
+| `codcorresp` | 按 .cod 规则做对应分析 | PNG |
+| `bayes` | 朴素贝叶斯，只训练 | 模型 |
+| `dbtables` | 看语料结构 | 终端输出 |
+| `db` | 列出已有工程 | 终端输出 |
+| `probe` | 打印运行环境 | 终端输出 |
+
+## 几个例子
+
+**找一份语料的主要话题**
+
+```
+khc words   corpus.txt --at 20,50,100
+khc netgraph corpus.txt out/net.png --min 150
 ```
 
-Check the environment any time:
+图上的词群就是话题簇。词越大出现越多，连线越粗共现越频繁。
 
-```bash
-node lib/cli.mjs doctor
-```
+**看哪些词能区分两组文档**
 
-## The 17 commands
-
-`words` · `freq` · `netgraph` · `conc` · `corresp` · `cls` · `mds` · `som` · `topic` · `morpho` · `mkoutvar` · `crosstab` · `codcorresp` · `bayes` · `dbtables` · `db` · `probe`
-
-Common options:
+语料里先用 `<h1>组名</h1>` 标好分组，然后：
 
 ```
---min N        minimum term frequency (the one that matters most for figures)
---max N        maximum term frequency
---min_df N     minimum document frequency
---edges N      max edges, default 60
---lang jp|zh   corpus language
---dict FILE    user dictionary
---csv FILE     export figure coordinates
---tani UNIT    counting unit: bun / dan / h1..h5
---topics N     number of topics
+khc mkoutvar corpus.txt --var h1 --tani dan
+khc corresp  corpus.txt out/ca.png --csv out/coords.csv
 ```
 
-## Handing it to an agent
+对应分析把词和组别画在同一张图上，离得近就说明关系强。
 
-Give this to any agent that can run shell commands:
+**查某个词的上下文**
 
 ```
-Corpus is at ./corpus.txt (Chinese, ~400k characters). I want to know the main topics.
-
-khc is at D:\khcoder3\khc.cmd.
-
-1. Run khc words corpus.txt --at 20,50,100 to see the term distribution.
-2. Pick a --min that lands the term count near 120.
-3. Run khc netgraph with that --min, save to out/net.png.
-4. Open the image and tell me, in plain language, which topic clusters you see.
+khc conc corpus.txt 领导 out/kwic.csv
 ```
 
-No protocol, no server, no token overhead — the agent just runs commands and reads files.
+每行一条命中，左中右三栏，能直接看出这个词都在什么句子里出现。
 
-## Things that will bite you
+**日文语料要配词典**
 
-**Normalize your counts.** KH Coder counts raw occurrences. A report that grows 80% each year will make every term look like it is rising. Divide by total tokens before comparing across documents.
+日文分词会把复合词切碎，比如「安全保障」切成「安全」「保障」。写个 CSV：
 
-**`freq` output is Shift_JIS, not UTF-8.** Excel opens it fine; decode as CP932 if you read it programmatically.
+```
+安全保障,0,0,0,名詞,一般,*,*,*,*,安全保障,アンゼンホショウ,アンゼンホショウ
+```
 
-**`cls` crashes on large corpora.** On a 54,526-paragraph Japanese corpus, 63 terms completed; ~170 terms crashed natively (exit `0xC000013A`, no Perl exception logged). Keep the term count under ~100 or split by year.
+然后加 `--dict mydict.csv`。格式是 MeCab 的 13 列，前四列填 0，重点是第 1 列词形、第 5 列词性、第 12 和 13 列读音。
 
-**`cls` output is extremely tall.** 281 terms produced a 480×5655 PNG with unreadable labels. Prefer `netgraph` or `corresp` for figures.
+**调参常用项**
 
-**`corresp` doesn't draw word labels by default** — fixed here. KH Coder builds two plot objects (one labelled, one with labels blanked) and the stock code saves the wrong one.
+```
+--min N      最小词频，画图最有用
+--max N      最大词频
+--min_df N   至少出现在几个文档里
+--edges N    最多画多少条边，默认 60
+--lang jp|zh 语料语言
+--dict FILE  用户词典
+--csv FILE   导出图形坐标
+--tani UNIT  计数单位：bun 文、dan 段、h1-h5 标题层级
+--topics N   topic model 主题数
+```
 
-**A logo splash covers the screen on every launch.** A 400×122 borderless window parked at screen centre that is never destroyed (the destroy call only fires on the Tk fallback path, which Windows never takes). The launcher starts `khsplashkill.exe` if present. See [docs/splash.md](docs/splash.md).
+## 踩过的坑
 
-**`khc.cmd` must be pure ASCII.** `cmd.exe` reads `.cmd` in the OEM code page; a single non-ASCII byte in a `rem` comment breaks parsing — and the exit code stays 0, so the failure is silent.
+这些都是实际遇到的，代码注释里也记着。
 
-**Never leave `*.pm.bak` in `plugin_en/`.** KH Coder strips the last 3 characters when scanning plugins, so `khc_cli.pm.bak` loads as `use khc_cli.pm` and raises a plugin-error dialog that blocks forever in an unattended run.
+**词频要归一化。** KH Coder 数的是原始次数。一份每年都在变厚的报告，所有词都会显示涨。跨年比较前先除以总词数。
 
-## License
+**`freq` 出来的是 Shift_JIS，不是 UTF-8。** Excel 打开正常，程序读要按 CP932 解码。
 
-Installer, CLI wrapper and docs: MIT.
+**`cls` 在大语料上会崩。** 5 万多段的日语语料上，63 个词能跑完，170 个词时直接崩，退出码 `0xC000013A`，日志里连 Perl 报错都没有。词数控制在 100 以内，或者按年切开。
 
-`plugin/khc_cli.pm`: **GPL-2.0**, because it links KH Coder's GPL-2.0 modules at runtime. Full text in `plugin/COPYING-GPL-2.0.txt`.
+**`cls` 的图特别长。** 281 个词出 480×5655 的 PNG，标签全叠一起。配图还是用 `netgraph` 或 `corresp`。
 
-KH Coder itself is not included and is licensed separately by its author.
+**`corresp` 默认不画词标签。** 这个项目修好了。KH Coder 内部建了两个绘图对象，一个带标签一个不带，原代码存的是不带那个。
+
+**启动时弹一个 logo 挡屏幕。** 400×122 无边框窗口停屏幕正中，不会自己消失。原因是销毁代码只在 Tk 分支执行，Windows 走不到。启动器会拉起 `khsplashkill.exe` 关掉它，详见 [docs/splash.md](docs/splash.md)。
+
+**`khc.cmd` 必须纯 ASCII。** cmd.exe 按 OEM 码页读 .cmd，`rem` 注释里一个中文字符就能破坏解析，而且退出码还是 0，出错看不出来。
+
+**`plugin_en/` 里不能放 `*.pm.bak`。** KH Coder 扫描插件时砍掉末 3 个字符，`khc_cli.pm.bak` 会被当成 `use khc_cli.pm` 加载，弹出 plugin error 对话框——无人值守时永远点不掉。
+
+## 给 agent 的交接单
+
+如果你用 Claude Code、Cursor、DSH 这类能执行命令的 agent，直接把这段丢给它：
+
+```
+语料在 ./corpus.txt，中文，约 40 万字。我想知道主要话题是什么。
+
+khc 命令在 <你的 KH Coder 安装目录>\khc.cmd（装完跑 `node lib/cli.mjs doctor` 会打印这个路径）。
+
+1. 先跑 khc words corpus.txt --at 20,50,100 看词频分布
+2. 选一个让词数落在 120 左右的 --min
+3. 跑 khc netgraph 出图，存到 out/net.png
+4. 打开图，用中文告诉我图上有几个话题群、各自包含哪些词
+```
+
+agent 会自己走完这四步。你不需要懂 KH Coder 的任何参数。
+
+**为什么这样可行**：命令行工具对 agent 来说是最简单的接口——不需要协议、不需要起服务、不占 token。它就是在敲命令、读文件。
+
+## 许可
+
+安装器、命令行包装、文档是 MIT。
+
+`plugin/khc_cli.pm` 是 **GPL-2.0**，因为运行时链接 KH Coder 的 GPL-2.0 模块，改了再分发的话 GPL-2.0 适用。全文在 `plugin/COPYING-GPL-2.0.txt`。
+
+KH Coder 本体不在这个包里，许可由作者单独规定。
