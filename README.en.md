@@ -30,7 +30,49 @@ A driver plugin runs *inside* `kh_coder.exe` and calls KH Coder's own analysis f
 - Node.js ≥ 18 (installer and CLI wrapper only)
 - KH Coder 3.x installed — [download](https://khcoder.net/dl3.html)
 
-## Install
+## Quick install (paste this to your AI agent)
+
+You do not have to type any of this yourself. Copy the whole block below and send it to any agent that can run shell commands — Claude Code, Codex, Cursor, DSH, WorkBuddy, anything. It installs the thing and reports back.
+
+```
+Install kh-coder-headless for me. It lets KH Coder run from the command line.
+Repo: https://github.com/BigFier/kh-coder-headless
+
+Please do this in order:
+
+1. Check the environment first
+   - Is this Windows?
+   - Is Node.js present? (node --version, needs 18 or newer)
+   - Is KH Coder installed? Look in D:\khcoder3, C:\khcoder3,
+     C:\Program Files\KH Coder, and the KHC_HOME environment variable.
+   If anything is missing, tell me what I need to install and stop there.
+
+2. Clone the repo into the current directory
+   git clone https://github.com/BigFier/kh-coder-headless.git
+   cd kh-coder-headless
+
+3. Run the installer
+   node lib/install.mjs
+   If it cannot find KH Coder, re-run with --khc-home pointing at my install.
+
+4. Verify
+   node lib/cli.mjs doctor
+   Report the KH Coder path and the driver status lines.
+   Then run probe through the generated khc.cmd and confirm the log contains
+   "invoked cmd=probe".
+
+5. Report back
+   Tell me where it installed, the full path to khc.cmd, and whether it works.
+   If any step fails, paste the full error. Do not guess and edit things.
+```
+
+When it finishes you get the path to `khc.cmd` — that is your entry point for every analysis command from then on.
+
+**Why this works**: installing is just a few commands and file checks, which is what agents are best at. It will also tell you what is missing — if Node.js is not installed, you get "install Node.js" instead of a wall of errors.
+
+---
+
+## Install (manual)
 
 ```bash
 git clone https://github.com/BigFier/kh-coder-headless.git

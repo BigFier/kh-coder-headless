@@ -86,7 +86,50 @@ agent 读图（它可以直接看 PNG），告诉你：
 你的命令  →  khc.cmd  →  kh_coder.exe（加载插件）→  KH Coder 原生分析  →  结果
 ```
 
-## 安装
+## 快速安装（把这段话发给你的 AI agent）
+
+你不用自己敲命令。把下面整段复制，发给任何能执行命令的 agent——Claude Code、Codex、Cursor、DSH、WorkBuddy 都行——它会自己装好并告诉你结果。
+
+```
+帮我安装 kh-coder-headless，这是一个让 KH Coder 能在命令行里跑的工具。
+仓库：https://github.com/BigFier/kh-coder-headless
+
+请按顺序做：
+
+1. 先确认环境
+   - 系统是不是 Windows
+   - 有没有 Node.js（node --version，需要 18 以上）
+   - KH Coder 装了没有。检查这几个位置：D:\khcoder3、C:\khcoder3、
+     C:\Program Files\KH Coder，以及环境变量 KHC_HOME
+   有哪个缺失就告诉我要先装什么，然后停下等我。
+
+2. 克隆仓库到当前目录
+   git clone https://github.com/BigFier/kh-coder-headless.git
+   cd kh-coder-headless
+
+3. 跑安装器
+   node lib/install.mjs
+   如果它说找不到 KH Coder，用 --khc-home 指定我装的那个目录重跑。
+
+4. 验证
+   node lib/cli.mjs doctor
+   把输出里的 KH Coder 路径和「驱动器」那几行的状态告诉我。
+   再用生成的 khc.cmd 跑一次 probe，确认日志里有 invoked cmd=probe。
+
+5. 汇报
+   告诉我：装在哪、khc.cmd 的完整路径是什么、能不能用。
+   如果有哪一步失败，把完整报错贴给我，不要自己猜着改。
+```
+
+agent 装完之后会给你一个 `khc.cmd` 的路径，那就是以后调用分析命令的入口。
+
+**为什么这样可行**：安装过程就是几条命令加几个文件检查，agent 最擅长这类活儿。它还会顺便帮你判断缺什么——比如没装 Node.js，它会直接告诉你，而不是让你对着一堆报错发呆。
+
+---
+
+## 安装（手动）
+
+想自己动手的话，就是下面几条命令。嫌麻烦就用上面的快速安装，让 agent 来做。
 
 需要 Windows、Node.js 18 以上，以及已经装好的 KH Coder 3.x。
 
