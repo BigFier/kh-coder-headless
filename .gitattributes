@@ -1,4 +1,4 @@
-﻿# Normalize line endings so the repo behaves the same on every platform.
+# Normalize line endings so the repo behaves the same on every platform.
 * text=auto eol=lf
 
 # Windows batch files MUST keep CRLF or cmd.exe mis-parses them.
@@ -8,3 +8,4 @@
 *.png binary
 *.jpg binary
 *.exe binary
+*.mp4 binary
