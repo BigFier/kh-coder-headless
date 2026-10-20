@@ -90,44 +90,40 @@ agent 读图（它可以直接看 PNG），告诉你：
 你的命令  →  khc.cmd  →  kh_coder.exe（加载插件）→  KH Coder 原生分析  →  结果
 ```
 
-## 快速安装（把这段话发给你的 AI agent）
+## 快速安装（把下面这段话发给 AI）
 
-你不用自己敲命令。把下面整段复制，发给任何能执行命令的 agent——Claude Code、Codex、Cursor、DSH、WorkBuddy 都行——它会自己装好并告诉你结果。
+你不用敲任何命令。把下面这一整段复制，发给你在用的 AI——Claude Code、Codex、Cursor、DSH、WorkBuddy 都行。剩下的它自己会做完。
 
 ```
-帮我安装 kh-coder-headless，这是一个让 KH Coder 能在命令行里跑的工具。
+请帮我安装 kh-coder-headless，并确认它能正常工作。
+
 仓库：https://github.com/BigFier/kh-coder-headless
 
-请按顺序做：
+你要自动完成这些事，遇到问题自己解决，不要停下来问我：
 
-1. 先确认环境
-   - 系统是不是 Windows
-   - 有没有 Node.js（node --version，需要 18 以上）
-   - KH Coder 装了没有。检查这几个位置：D:\khcoder3、C:\khcoder3、
-     C:\Program Files\KH Coder，以及环境变量 KHC_HOME
-   有哪个缺失就告诉我要先装什么，然后停下等我。
+1. 把仓库克隆到当前目录，进入 kh-coder-headless
 
-2. 克隆仓库到当前目录
-   git clone https://github.com/BigFier/kh-coder-headless.git
-   cd kh-coder-headless
+2. 运行 node lib/install.mjs
+   - 如果它说找不到 KH Coder，说明这台电脑还没装。把安装器给出的下载地址
+     （百度网盘链接，含提取码）原样告诉我，让我先装好，然后继续。
+   - 如果它说找不到 Node.js，也告诉我，我需要先装 Node.js。
+   - 其它报错你自己排查修复，修不了再问。
 
-3. 跑安装器
-   node lib/install.mjs
-   如果它说找不到 KH Coder，用 --khc-home 指定我装的那个目录重跑。
+3. 装完之后必须实测一遍，用仓库里自带的示例语料：
+   examples/quickstart/corpus.txt
+   跑一次分词统计和一次共现网络出图，确认能出结果。
 
-4. 验证
-   node lib/cli.mjs doctor
-   把输出里的 KH Coder 路径和「驱动器」那几行的状态告诉我。
-   再用生成的 khc.cmd 跑一次 probe，确认日志里有 invoked cmd=probe。
+4. 最后告诉我三件事：
+   - 装在哪（khc.cmd 的完整路径）
+   - 实测结果（分出来多少个词、图出了多大）
+   - 能不能用
 
-5. 汇报
-   告诉我：装在哪、khc.cmd 的完整路径是什么、能不能用。
-   如果有哪一步失败，把完整报错贴给我，不要自己猜着改。
+说话简单直白，别用术语，我要给不懂电脑的人看。
 ```
 
-agent 装完之后会给你一个 `khc.cmd` 的路径，那就是以后调用分析命令的入口。
+装好之后，你不用记任何命令。直接跟 AI 说你要做什么就行：
 
-**为什么这样可行**：安装过程就是几条命令加几个文件检查，agent 最擅长这类活儿。它还会顺便帮你判断缺什么——比如没装 Node.js，它会直接告诉你，而不是让你对着一堆报错发呆。
+> 「用 khc 分析 D:\我的语料.txt，看看主要话题是什么」
 
 ---
 
@@ -137,7 +133,7 @@ agent 装完之后会给你一个 `khc.cmd` 的路径，那就是以后调用分
 
 需要 Windows、Node.js 18 以上，以及已经装好的 KH Coder 3.x。
 
-KH Coder 本体不在这个包里（装完 7.7 GB，GPL-2.0，不方便再分发），先去 [官网](https://khcoder.net/dl3.html) 装 Windows 版。
+KH Coder 本体不在这个包里（装完 7.7 GB，GPL-2.0，不方便再分发）。下载地址见 [docs/khcoder-download.md](docs/khcoder-download.md)，也可以从[官网](https://khcoder.net/dl3.html)下。
 
 ```
 git clone https://github.com/BigFier/kh-coder-headless.git

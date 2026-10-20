@@ -30,47 +30,44 @@ A driver plugin runs *inside* `kh_coder.exe` and calls KH Coder's own analysis f
 - Node.js ≥ 18 (installer and CLI wrapper only)
 - KH Coder 3.x installed — [download](https://khcoder.net/dl3.html)
 
-## Quick install (paste this to your AI agent)
+## Quick install (paste this to your AI)
 
-You do not have to type any of this yourself. Copy the whole block below and send it to any agent that can run shell commands — Claude Code, Codex, Cursor, DSH, WorkBuddy, anything. It installs the thing and reports back.
+You do not type any commands. Copy the block below and send it to the AI you already use — Claude Code, Codex, Cursor, DSH, WorkBuddy, anything. It does the rest.
 
 ```
-Install kh-coder-headless for me. It lets KH Coder run from the command line.
+Install kh-coder-headless and confirm it actually works.
+
 Repo: https://github.com/BigFier/kh-coder-headless
 
-Please do this in order:
+Do this end to end, and fix problems yourself instead of stopping to ask me:
 
-1. Check the environment first
-   - Is this Windows?
-   - Is Node.js present? (node --version, needs 18 or newer)
-   - Is KH Coder installed? Look in D:\khcoder3, C:\khcoder3,
-     C:\Program Files\KH Coder, and the KHC_HOME environment variable.
-   If anything is missing, tell me what I need to install and stop there.
+1. Clone the repo into the current directory and cd into kh-coder-headless
 
-2. Clone the repo into the current directory
-   git clone https://github.com/BigFier/kh-coder-headless.git
-   cd kh-coder-headless
+2. Run node lib/install.mjs
+   - If it says KH Coder is not found, this machine does not have it yet.
+     Relay the download link the installer prints (a Baidu Pan URL with the
+     access code) so I can install it first, then carry on.
+   - If it says Node.js is missing, tell me and I will install that first.
+   - For any other error, diagnose and fix it yourself; ask only if stuck.
 
-3. Run the installer
-   node lib/install.mjs
-   If it cannot find KH Coder, re-run with --khc-home pointing at my install.
+3. After installing, run a real test with the bundled sample corpus:
+   examples/quickstart/corpus.txt
+   Do one word-count run and one co-occurrence figure, confirm both work.
 
-4. Verify
-   node lib/cli.mjs doctor
-   Report the KH Coder path and the driver status lines.
-   Then run probe through the generated khc.cmd and confirm the log contains
-   "invoked cmd=probe".
+4. Report three things:
+   - where it installed (full path to khc.cmd)
+   - the test results (how many words, how big the image)
+   - whether it works
 
-5. Report back
-   Tell me where it installed, the full path to khc.cmd, and whether it works.
-   If any step fails, paste the full error. Do not guess and edit things.
+Speak plainly, no jargon — I am going to show this to someone who is not technical.
 ```
 
-When it finishes you get the path to `khc.cmd` — that is your entry point for every analysis command from then on.
+After that you never need to remember a command. Just tell the AI what you want:
 
-**Why this works**: installing is just a few commands and file checks, which is what agents are best at. It will also tell you what is missing — if Node.js is not installed, you get "install Node.js" instead of a wall of errors.
+> "Use khc to analyse D:\my-corpus.txt and tell me the main topics."
 
 ---
+
 
 ## Install (manual)
 
@@ -80,7 +77,7 @@ cd kh-coder-headless
 node lib/install.mjs
 ```
 
-KH Coder itself is not bundled: it is ~7.7 GB and GPL-2.0. The installer finds your existing installation (environment variable → common paths → registry → `PATH`), deploys the driver into `plugin_en/`, generates a launcher, and verifies with `probe`.
+KH Coder itself is not bundled: it is ~7.7 GB and GPL-2.0. Download: [docs/khcoder-download.md](docs/khcoder-download.md) (Baidu Pan). The installer finds your existing installation (environment variable → common paths → registry → `PATH`), deploys the driver into `plugin_en/`, generates a launcher, and verifies with `probe`.
 
 If detection fails:
 
